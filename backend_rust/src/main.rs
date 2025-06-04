@@ -34,6 +34,7 @@ struct GenericResponse {
 #[derive(Serialize, Debug, sqlx::FromRow)] // FromRow 用于从数据库行直接映射
 struct FoodListItem {
     product_id: String,
+    product_name: Option<String>,
     // 假设我们想从 metadata_json 中提取 productName
     // 注意: sqlx::FromRow 不能直接从 JSON 内部字段映射，我们需要在查询后手动处理或在查询中提取
     // 为简单起见，我们先只包含直接从表列获取的字段，productName 可以在 handler 中处理
@@ -57,13 +58,20 @@ struct FoodRecordDetail {
 #[derive(sqlx::FromRow, Debug)]
 struct RawFoodRecord {
     product_id: String,
-    metadata_json: String, // 从数据库读取时是字符串
+    
     onchain_metadata_hash: String,
     blockchain_transaction_hash: String,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[derive(sqlx::FromRow, Debug)] // Debug 是为了方便打印，FromRow 用于映射
+struct RawFoodListItem {
+    product_id: String,
+    metadata_json: String, // 这个字段是从 CAST(metadata_json AS CHAR) 获取的
+    onchain_metadata_hash: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
 
 
 #[get("/health")]
@@ -145,20 +153,20 @@ async fn create_food_record(
     }
 }
 
-// ... (create_food_record 函数之后) ...
-
-#[get("/api/food-records")] // 定义路由为 GET /api/food-records
+#[get("/api/food-records")]
 async fn get_food_records_list(
     app_state: web::Data<AppState>,
 ) -> impl Responder {
-    println!("接收到获取食品列表的请求");
+    println!("接收到获取食品列表的请求 (含产品名称)");
 
-    // 从数据库查询，只选择需要的列
-    // 注意：为了简单，这里没有实现分页，实际应用中应该添加分页
     let query_result = sqlx::query_as!(
-        FoodListItem,
+        RawFoodListItem, // 查询结果映射到 RawFoodListItem
         r#"
-        SELECT product_id, onchain_metadata_hash, created_at as "created_at!: chrono::DateTime<chrono::Utc>"
+        SELECT
+            product_id as "product_id!", -- 断言 product_id 不为 NULL
+            CAST(metadata_json AS CHAR) as "metadata_json!", -- 断言 CAST 结果不为 NULL
+            onchain_metadata_hash as "onchain_metadata_hash!", -- 断言哈希不为 NULL
+            created_at as "created_at!: chrono::DateTime<chrono::Utc>"
         FROM traceability_data
         ORDER BY created_at DESC
         "#
@@ -167,15 +175,34 @@ async fn get_food_records_list(
     .await;
 
     match query_result {
-        Ok(records) => {
-            // 如果需要从 metadata_json 中提取 productName 并添加到 FoodListItem
-            // 你需要迭代 records，解析 metadata_json，提取 productName，然后构建新的包含 productName 的列表
-            // 这里为了简化，我们直接返回 FoodListItem 中已有的字段
-            println!("成功从数据库获取 {} 条食品记录列表", records.len());
-            HttpResponse::Ok().json(records)
+        Ok(raw_records) => {
+            let mut food_list_items: Vec<FoodListItem> = Vec::new();
+
+            for raw_record in raw_records {
+                let product_name: Option<String> = match serde_json::from_str::<JsonValue>(&raw_record.metadata_json) {
+                    Ok(metadata_value) => {
+                        metadata_value.get("productName").and_then(|v| v.as_str()).map(String::from)
+                    }
+                    Err(e) => {
+                        eprintln!("解析产品ID {} 的元数据失败 (列表): {:?}", raw_record.product_id, e);
+                        None
+                    }
+                };
+
+                // 确保 FoodListItem 结构体定义包含 product_name
+                food_list_items.push(FoodListItem {
+                    product_id: raw_record.product_id,
+                    product_name, // 这个 product_name 是 Option<String> 类型
+                    onchain_metadata_hash: raw_record.onchain_metadata_hash,
+                    created_at: raw_record.created_at,
+                });
+            }
+
+            println!("成功从数据库获取 {} 条食品记录列表 (含产品名称)", food_list_items.len());
+            HttpResponse::Ok().json(food_list_items)
         }
         Err(e) => {
-            eprintln!("数据库查询食品列表错误: {:?}", e);
+            eprintln!("数据库查询食品列表错误 (含产品名称): {:?}", e);
             HttpResponse::InternalServerError().json(GenericResponse {
                 status: "error".to_string(),
                 message: "获取食品列表失败。".to_string(),
@@ -257,6 +284,7 @@ async fn get_food_record_detail(
         }
     }
 }
+
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
