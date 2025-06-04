@@ -1,0 +1,25 @@
+# food_traceability_platform/docker-compose.yml
+version: "3.8"
+
+services:
+  mysql_db:
+    image: mysql:8.0
+    container_name: mysql_food_traceability_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: 56865549
+      MYSQL_DATABASE: food_traceability_db
+      MYSQL_USER: luna # 创建一个普通用户
+      MYSQL_PASSWORD: 5686 # 普通用户密码
+    ports:
+      - "3306:3306" # 将主机的3306端口映射到容器的3306端口
+    volumes:
+      - mysql_data:/var/lib/mysql # 持久化数据卷
+    healthcheck: # 确保数据库启动完成才认为是健康的
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p56865549"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql_data: # 定义一个命名的卷用于持久化MySQL数据

@@ -1,0 +1,6 @@
+# food_traceability_platform/.gitignore
+# ... (其他忽略规则) ...
+
+# Backend specific
+backend_rust/.env
+backend_rust/target/
