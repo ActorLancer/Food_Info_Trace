@@ -1,9 +1,8 @@
-// food_traceability_platform/frontend_typescript/src/pages/AddFoodPage.tsx
 import React, { useState, useEffect } from 'react';
 import { type Signer, type Contract, type Eip1193Provider } from 'ethers';
 import {
     Form, Input, Button, DatePicker, Spin, Alert, Typography, Space, message as antdMessage, Tag, // 添加 Tag
-    // type FormProps // 如果用到
+    // type FormProps
 } from 'antd'; // 引入 AntD 组件
 import { WalletOutlined, CloudUploadOutlined, /* CheckCircleOutlined, WarningOutlined */ } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs'; // Dayjs 只作用类型
@@ -13,7 +12,7 @@ import 'dayjs/locale/zh-cn';
 dayjs.locale('zh-cn'); // 全局设置
 
 const { Title, Text } = Typography;
-const { TextArea } = Input; // 如果需要多行文本输入
+const { TextArea } = Input; // 需要多行文本输入-if
 
 // 声明 window.ethereum 的类型
 declare global {
@@ -25,14 +24,13 @@ declare global {
     }
 }
 
-// 定义表单数据的接口 (与之前一致，但 DatePicker 返回的是 Dayjs 对象)
+// 定义表单数据的接口 ( DatePicker 返回的是 Dayjs 对象)
 interface FoodFormAntdData {
     productId: string;
     productName: string;
     producerInfo: string;
     productionDate: Dayjs | null; // AntD DatePicker 返回 Dayjs 对象
     origin: string;
-    // processingSteps?: string; // 示例：加工流程，使用 TextArea
 }
 
 // 用于提交到元数据和后端的纯数据对象
@@ -262,14 +260,14 @@ const AddFoodPage: React.FC = () => {
                         <Input placeholder="例如：本地农场"/>
                     </Form.Item>
 
-                    {/* 示例: 加工流程 (多行文本)
+                    {/* DEMO: 加工流程 (多行文本) */}
                     <Form.Item
                         label="加工流程描述"
                         name="processingSteps"
                     >
                         <TextArea rows={4} placeholder="描述主要的加工或处理步骤..."/>
                     </Form.Item>
-                    */}
+
 
                     <Form.Item {...tailFormItemLayout}>
                         <Button type="primary" htmlType="submit" loading={isLoading} icon={<CloudUploadOutlined />}>

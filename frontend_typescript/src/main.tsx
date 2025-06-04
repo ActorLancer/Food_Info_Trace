@@ -1,21 +1,22 @@
-// food_traceability_platform/frontend_typescript/src/main.tsx
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Link as RouterLink } from 'react-router-dom'; // 重命名 Link 为 RouterLink 以避免与 AntD Link 冲突
 
-import App from './App.tsx';
+import App from './App.tsx';    // import { App } from './App.tsx';
 import HomePage from './pages/HomePage.tsx';
 import AddFoodPage from './pages/AddFoodPage.tsx';
 import FoodDetailPage from './pages/FoodDetailPage.tsx';
 import SearchPage from './pages/SearchPage.tsx';
-import './index.css'; // 您自己的全局样式 (可以保留或修改)
+import 'antd/dist/reset.css';   // Sugest: 在自定义样式前, Ant Design v5+ 使用 reset.css 来替代 normalize.css
+                                // Ant Design v4 or older，import 'antd/dist/antd.css';
+import './index.css'; // 全局样式
 
-import 'antd/dist/reset.css'; // Ant Design v5+ 使用 reset.css 来替代 normalize.css (确保在您的 index.css 之前或之后，通常建议在自定义样式前)
-// 如果您使用的是 Ant Design v4 或更早版本，可能是 import 'antd/dist/antd.css';
+
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
+      {/* TODO */}
       {/* 导航栏可以后续用 AntD 的 Menu 组件重构到 App.tsx 中 */}
       {/* <nav style={{ marginBottom: '20px', padding: '10px', background: '#f0f0f0' }}>
         <RouterLink to="/" style={{ marginRight: '15px' }}>首页</RouterLink>

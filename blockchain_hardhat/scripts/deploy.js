@@ -1,9 +1,11 @@
-// food_traceability_platform/blockchain_hardhat/scripts/deploy.js
 async function main() {
   const [deployer] = await ethers.getSigners(); // 获取部署者账户
 
   console.log("Deploying contracts with the account:", deployer.address);
-  console.log("Account balance:", (await ethers.provider.getBalance(deployer.address)).toString());
+  console.log(
+    "Account balance:",
+    (await ethers.provider.getBalance(deployer.address)).toString()
+  );
 
   // 获取合约工厂
   const FoodTraceability = await ethers.getContractFactory("FoodTraceability");
@@ -17,7 +19,10 @@ async function main() {
   const contractAddress = await foodTraceability.getAddress();
 
   console.log("FoodTraceability contract deployed to:", contractAddress);
-  console.log("Transaction hash:", foodTraceability.deploymentTransaction().hash);
+  console.log(
+    "Transaction hash:",
+    foodTraceability.deploymentTransaction().hash
+  );
 }
 
 main()

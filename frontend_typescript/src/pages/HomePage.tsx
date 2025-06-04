@@ -1,4 +1,3 @@
-// food_traceability_platform/frontend_typescript/src/pages/HomePage.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom'; // 使用 useNavigate 替代 Link 进行编程式导航
 import { Table, Button, Space, Tooltip, Spin, Alert, Typography, Tag } from 'antd'; // 引入 AntD 组件
@@ -53,8 +52,8 @@ const columns = (navigate: ReturnType<typeof useNavigate>) => [ // 将 navigate 
     {
         title: '操作',
         key: 'action',
-        // dataIndex: undefined, // 操作列通常没有 dataIndex
-        render: (_text: unknown, record: FoodListItemFromAPI, _index: number) => ( // 修改点: _text 类型为 unknown, 也可以加上 _index
+        // dataIndex: undefined, // 操作列 dataIndex
+        render: (_text: unknown, record: FoodListItemFromAPI, _index: number) => (
             <Space size="middle">
                 <Tooltip title="查看详情">
                     <Button
@@ -65,7 +64,7 @@ const columns = (navigate: ReturnType<typeof useNavigate>) => [ // 将 navigate 
                         详情
                     </Button>
                 </Tooltip>
-                {/* 如果未来有更多操作按钮，可以继续在这里添加 */}
+                {/* 未来坑能会有更多操作按钮，继续在这里添加 */}
             </Space>
         ),
     },
@@ -142,18 +141,5 @@ const HomePage: React.FC = () => {
             </div>
         );
     };
-
-// const tableHeaderStyle: React.CSSProperties = {
-//     border: '1px solid #ddd',
-//     padding: '8px',
-//     textAlign: 'left',
-//     backgroundColor: '#f2f2f2',
-// };
-
-// const tableCellStyle: React.CSSProperties = {
-//     border: '1px solid #ddd',
-//     padding: '8px',
-//     textAlign: 'left',
-// };
 
 export default HomePage;

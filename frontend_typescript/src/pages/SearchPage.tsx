@@ -1,4 +1,3 @@
-// food_traceability_platform/frontend_typescript/src/pages/SearchPage.tsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Input, Button, Alert, Typography, Space, message as antdMessage } from 'antd'; // 引入 AntD 组件
@@ -40,7 +39,7 @@ const SearchPage: React.FC = () => {
                 setStatusMessage(`找到产品ID: ${trimmedSearchTerm}，正在跳转到详情页...`);
                 setTimeout(() => {
                     navigate(`/food/${trimmedSearchTerm}`);
-                }, 1000); // 稍微延迟一下让用户看到消息
+                }, 600); // 稍微延迟一下让用户看到消息
             } else if (response.status === 404) {
                 antdMessage.error({ content: `未找到产品 ${trimmedSearchTerm}`, key: 'searching' });
                 setSearchStatus('not_found');
@@ -70,8 +69,8 @@ const SearchPage: React.FC = () => {
     const onSearchInputChange = (value: string) => {
         setSearchTerm(value);
         // 可以选择在这里直接调用搜索，或者让用户点击按钮
-        // 如果希望输入后立即搜索，则取消注释下一行：
-        // if (value.trim()) handleSearch();
+        // 即：输入后立即搜索与手动点击
+        // if (value.trim()) handleSearch();    // 自动
     }
 
     return (

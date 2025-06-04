@@ -1,4 +1,3 @@
-// food_traceability_platform/frontend_typescript/src/pages/FoodDetailPage.tsx
 import React, { useState, useEffect } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom'; // 重命名 Link
 import { type Signer } from 'ethers';
@@ -19,7 +18,7 @@ declare global {
 
 const { Title, Paragraph, Text } = Typography;
 
-// JSON 类型定义 (与之前一致)
+// JSON 类型定义
 type JsonPrimitive = string | number | boolean | null;
 type JsonValue = JsonPrimitive | JsonObject | JsonArray;
 type JsonObject = { [key: string]: JsonValue };
@@ -131,12 +130,10 @@ const FoodDetailPage: React.FC = () => {
         } catch (err: unknown) {
             console.error("从链上获取哈希失败:", err);
             let errMsg = "从链上获取哈希失败。";
-             // ... (使用之前完善的错误解析逻辑) ...
             if (typeof err === 'object' && err !== null) {
                 interface ChainError { message?: string; reason?: string; info?: { error?: { message?: string, code?: number } }; code?: number | string; }
                 const error = err as ChainError;
                 if (error.info?.error?.message) errMsg = `RPC 错误: ${error.info.error.message}`;
-                else if (error.reason) errMsg = `合约调用错误: ${error.reason}`;
                 else if (error.message) errMsg = error.message;
                 if (error.code === 4001 || error.info?.error?.code === 4001) errMsg = "用户拒绝了钱包请求。";
             } else if (typeof err === 'string') errMsg = err;

@@ -1,6 +1,5 @@
-// food_traceability_platform/blockchain_hardhat/contracts/FoodTraceability.sol
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20; // 建议使用一个较新的稳定版本
+pragma solidity ^0.8.20; // 使用一个较新的稳定版本
 
 import "hardhat/console.sol"; // 用于调试
 
@@ -34,7 +33,7 @@ contract FoodTraceability {
         console.log("Contract address will be available after deployment.");
     }
 
-    function addRecord(string memory _productId, bytes32 _metadataHash) public { // 实际应用中可添加 onlyOwner 或其他权限控制
+    function addRecord(string memory _productId, bytes32 _metadataHash) public { // 实际应用中可添加 onlyOwner 或其他权限控制（目前本地网络测试）
         // require(!metadataHashExists[_metadataHash], "Metadata hash already exists to prevent duplicates");
         // require(records[_productId].timestamp == 0, "Product ID already has a record; use update function if needed");
 
@@ -63,7 +62,7 @@ contract FoodTraceability {
         return metadataHashExists[_metadataHash];
     }
 
-    // (可选) 函数来更改owner，如果需要
+    // 函数来更改owner，如果需要
     function transferOwnership(address newOwner) public onlyOwner {
         require(newOwner != address(0), "New owner cannot be the zero address");
         owner = newOwner;

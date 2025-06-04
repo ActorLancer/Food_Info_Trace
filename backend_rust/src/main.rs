@@ -1,6 +1,4 @@
-// food_traceability_platform/backend_rust/src/main.rs
-use actix_web::{get, post, web, App, HttpServer, Responder, HttpResponse}; // 确保 post 和 web::Json 被导入
-use dotenvy::dotenv;
+use actix_web::{get, post, web, App, HttpServer, Responder, HttpResponse};
 use sqlx::mysql::MySqlPoolOptions;
 use sqlx::MySqlPool;
 use std::env;
@@ -12,7 +10,7 @@ pub struct AppState {
     db_pool: MySqlPool,
 }
 // 定义前端发送过来的请求体结构
-#[derive(Deserialize, Debug)] // Debug 是为了方便打印
+#[derive(Deserialize, Debug)]
 struct FoodRecordRequest {
     #[serde(rename = "productId")] // 对应前端JS的驼峰命名
     product_id: String,
@@ -23,7 +21,7 @@ struct FoodRecordRequest {
     transaction_hash: String,
 }
 
-// (可选) 定义一个简单的响应结构体
+// 定义一个简单的响应结构体
 #[derive(Serialize)]
 struct GenericResponse {
     status: String,
@@ -35,9 +33,8 @@ struct GenericResponse {
 struct FoodListItem {
     product_id: String,
     product_name: Option<String>,
-    // 假设我们想从 metadata_json 中提取 productName
-    // 注意: sqlx::FromRow 不能直接从 JSON 内部字段映射，我们需要在查询后手动处理或在查询中提取
-    // 为简单起见，我们先只包含直接从表列获取的字段，productName 可以在 handler 中处理
+    // 从 metadata_json 中提取 productName
+    // sqlx::FromRow 不能直接从 JSON 内部字段映射，需要在查询后手动处理或在查询中提取
     onchain_metadata_hash: String,
     created_at: chrono::DateTime<chrono::Utc>, // 使用 chrono 处理时间戳
 }
@@ -50,22 +47,21 @@ struct FoodRecordDetail {
     metadata_json: sqlx::types::Json<JsonValue>, // 使用 sqlx::types::Json
     onchain_metadata_hash: String,
     blockchain_transaction_hash: String,
-    created_at: chrono::DateTime<chrono::Utc>, // 假设已通过上面的类型注解解决
-    updated_at: chrono::DateTime<chrono::Utc>, // 假设已通过上面的类型注解解决
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 // 专门用于从数据库查询 metadata_json 字符串的结构体
 #[derive(sqlx::FromRow, Debug)]
 struct RawFoodRecord {
     product_id: String,
-    
     onchain_metadata_hash: String,
     blockchain_transaction_hash: String,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(sqlx::FromRow, Debug)] // Debug 是为了方便打印，FromRow 用于映射
+#[derive(sqlx::FromRow, Debug)] // FromRow 用于映射
 struct RawFoodListItem {
     product_id: String,
     metadata_json: String, // 这个字段是从 CAST(metadata_json AS CHAR) 获取的
@@ -82,8 +78,8 @@ async fn health_check() -> impl Responder {
     })
 }
 
-// 新的 API 端点处理函数
-#[post("/api/food-records")] // 定义路由为 POST /api/food-records
+// API 端点处理函数
+#[post("/api/food-records")]
 async fn create_food_record(
     app_state: web::Data<AppState>, // 注入应用状态 (包含数据库连接池)
     record_request: web::Json<FoodRecordRequest>, // 从请求体中提取并反序列化JSON数据
@@ -135,8 +131,7 @@ async fn create_food_record(
         }
         Err(e) => {
             eprintln!("数据库插入错误: {:?}", e);
-            // 可以根据具体的 sqlx::Error 类型返回更详细的错误信息
-            // 例如，如果是唯一约束冲突 (e.g., product_id 已存在)
+            // TODO: 可以根据具体的 sqlx::Error 类型返回更详细的错误信息
             if let Some(db_err) = e.as_database_error() {
                 if db_err.is_unique_violation() {
                     return HttpResponse::Conflict().json(GenericResponse { // 409 Conflict
@@ -242,16 +237,17 @@ async fn get_food_record_detail(
             // record.metadata_json 现在是 sqlx::types::Json<JsonValue>
             // 要在 HttpResponse::Ok().json() 中序列化，它内部的 JsonValue 可以被 serde 处理
             println!("成功从数据库获取产品ID {} 的详情", product_id);
-            // 注意：FoodRecordDetail 的 metadata_json 字段是 sqlx::types::Json<JsonValue>
-            // 为了让 serde 正确序列化为前端期望的普通 JSON 对象，我们需要将其解包
-            // 或者修改 FoodRecordDetail 的 Serialize 实现，或者创建一个新的 DTO
-            // 简单起见，我们创建一个临时的结构体或直接构建 JsonValue 进行响应
 
+            // TODO:
+            // FoodRecordDetail 的 metadata_json 字段是 sqlx::types::Json<JsonValue>
+            // 为了让 serde 正确序列化为前端期望的普通 JSON 对象，需要将其解包
+            // 或者修改 FoodRecordDetail 的 Serialize 实现，或者创建一个新的 DTO
+            // 简单起见，创建一个临时的结构体(或直接构建 JsonValue 进行响应)
             // 创建一个用于响应的临时结构体，将 sqlx::types::Json<JsonValue> 转换为 JsonValue
             #[derive(Serialize)]
             struct FoodRecordDetailResponse {
                 product_id: String,
-                metadata_json: JsonValue, // 直接用 JsonValue
+                metadata_json: JsonValue,
                 onchain_metadata_hash: String,
                 blockchain_transaction_hash: String,
                 created_at: chrono::DateTime<chrono::Utc>,
@@ -316,8 +312,8 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(AppState { db_pool: pool.clone() }))
             .service(health_check)
             .service(create_food_record)
-            .service(get_food_records_list)   // <--- 注册列表查询服务
-            .service(get_food_record_detail)  // <--- 注册详情查询服务
+            .service(get_food_records_list)
+            .service(get_food_record_detail)
     })
     .bind(&server_address)?
     .run()
