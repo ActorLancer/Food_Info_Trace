@@ -12,3 +12,9 @@ serde_json = "1.0"
 sqlx = { version = "0.7", features = [ "runtime-tokio-rustls", "mysql", "chrono", "json" ] } # 数据库交互 (MySQL, Tokio runtime, Chrono types, JSON type)
 dotenvy = "0.15"                                      # 加载 .env 文件
 chrono = { version = "0.4", features = ["serde"] }    # 日期和时间处理，启用 serde 支持
+# ------------------------------------------------------------------
+# argon2 = "0.3"                                        # 密码哈希处理
+# bcrypt = "0.12"                                       # 密码哈希处理
+# jsonwebtoken = { version = "8", features = ["serde"] } # JSON Web Token (JWT) 处理，启用 serde 支持
+# validator = { version = "0.16", features = ["derive"] } # 数据验证，启用 derive 宏支持
+# log = "0.4"                                          # 日志记录

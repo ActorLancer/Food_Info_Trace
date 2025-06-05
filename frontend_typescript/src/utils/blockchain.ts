@@ -2,7 +2,7 @@
 import { ethers, BrowserProvider, Contract, type Signer, type Eip1193Provider } from "ethers";
 // 从 Hardhat 部署脚本中获取的合约地址
 // 将这里的地址替换为实际部署的合约地址
-const FOOD_TRACEABILITY_CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3"; // <--- 替换这里!!!
+const FOOD_TRACEABILITY_CONTRACT_ADDRESS = "0x5fbdb2315678afecb367f032d93f642f64180aa3";
 
 // 从 Hardhat artifacts 中获取的 ABI (部分)
 // 从 artifacts/contracts/FoodTraceability.sol/FoodTraceability.json 获取完整的 ABI
@@ -181,9 +181,23 @@ export const EXPECTED_NETWORK_NAME = "Hardhat Local"; // 添加网络时的提�
 export const EXPECTED_RPC_URL = "http://127.0.0.1:8545"; // Hardhat RPC
 export const EXPECTED_CURRENCY_SYMBOL = "ETH"; // or "GO"
 
-interface EthereumWindow extends Window {
-  ethereum?: Eip1193Provider & { isMetaMask?: boolean; selectedAddress?: string | null };
+// Old Method
+// interface EthereumWindow extends Window {
+//   ethereum?: Eip1193Provider & { isMetaMask?: boolean; selectedAddress?: string | null };
+// }
+// declare let window: EthereumWindow;
+
+interface ExtendedEthereumProvider extends Eip1193Provider {
+  isMetaMask?: boolean;
+  selectedAddress?: string | null;
+  on: (event: string, handler: (...args: any[]) => void) => void;
+  removeListener: (event: string, handler: (...args: any[]) => void) => void;
 }
+
+interface EthereumWindow extends Window {
+  ethereum?: ExtendedEthereumProvider;
+}
+
 declare let window: EthereumWindow;
 
 // 尝试添加或切换到期望的网络

@@ -9,12 +9,12 @@ import { RollbackOutlined, CheckCircleOutlined, WarningOutlined, SafetyCertifica
 import { getProviderAndSigner, getFoodTraceabilityContract } from '../utils/blockchain';
 
 // 解决 window.ethereum 类型问题
-import { type Eip1193Provider } from 'ethers';
-declare global {
-    interface Window {
-        ethereum?: Eip1193Provider & { isMetaMask?: boolean; selectedAddress?: string | null; };
-    }
-}
+// import { type Eip1193Provider } from 'ethers';
+// declare global {
+//     interface Window {
+//         ethereum?: Eip1193Provider & { isMetaMask?: boolean; selectedAddress?: string | null; };
+//     }
+// }
 
 const { Title, Paragraph, Text } = Typography;
 

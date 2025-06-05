@@ -4,6 +4,7 @@ use sqlx::MySqlPool;
 use std::env;
 use serde::{Deserialize, Serialize}; // 导入 Serialize 和 Deserialize
 use serde_json::Value as JsonValue; // 用于处理任意 JSON 结构的元数据
+use dotenvy::dotenv; // 用于加载 .env 文件中的环境变量
 
 // 用于共享数据库连接池的状态
 pub struct AppState {

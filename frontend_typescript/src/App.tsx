@@ -204,7 +204,15 @@ const App: React.FC = () => {
 
                  if (code === 4902) {
                      try {
-                         // ... addEthereumChain logic ...
+                        // ... addEthereumChain logic ...
+                        await provider.send("wallet_addEthereumChain", [
+                            {
+                                chainId: APP_EXPECTED_CHAIN_ID,
+                                chainName: APP_EXPECTED_NETWORK_NAME,
+                                rpcUrls: ["http://127.0.0.1:8545"], // 与 blockchain.ts 一致
+                                nativeCurrency: { name: APP_EXPECTED_NETWORK_NAME, symbol: "ETH", decimals: 18 },
+                            },
+                        ]);
                      } catch (addErr: unknown) {
                           console.error("添加网络失败:", addErr); // 只是为了防止 ESLint 报错
                           let specificAddErrorMessage: string | undefined;
@@ -274,6 +282,7 @@ const App: React.FC = () => {
                     <AntdButton key="switch" type="primary" onClick={handleSwitchNetworkInModal}>
                         切换到 {APP_EXPECTED_NETWORK_NAME}
                     </AntdButton>,
+                    // 可以添加一个“我知道了”按钮，但不推荐，因为应用在错误网络下功能不正常
                 ]}
             >
                 <p>您当前连接的网络 (Chain ID: {currentChainId || '未知'}) 与本应用期望的网络 ({APP_EXPECTED_NETWORK_NAME} - Chain ID: {APP_EXPECTED_CHAIN_ID}) 不符。</p>

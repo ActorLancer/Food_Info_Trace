@@ -15,14 +15,14 @@ const { Title, Text } = Typography;
 const { TextArea } = Input; // 需要多行文本输入-if
 
 // 声明 window.ethereum 的类型
-declare global {
-    interface Window {
-        ethereum?: Eip1193Provider & { // 使用 Eip1193Provider 并添加 Metamask 特有的属性
-            isMetaMask?: boolean;
-            selectedAddress?: string | null;
-        };
-    }
-}
+// declare global {
+//     interface Window {
+//         ethereum?: Eip1193Provider & { // 使用 Eip1193Provider 并添加 Metamask 特有的属性
+//             isMetaMask?: boolean;
+//             selectedAddress?: string | null;
+//         };
+//     }
+// }
 
 // 定义表单数据的接口 ( DatePicker 返回的是 Dayjs 对象)
 interface FoodFormAntdData {
