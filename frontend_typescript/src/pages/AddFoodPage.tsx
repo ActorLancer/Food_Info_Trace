@@ -40,7 +40,7 @@ interface FoodMetadata {
     producerInfo: string;
     productionDate: string; // 存储为 ISO 格式字符串
     origin: string;
-    // processingSteps?: string;
+    processingSteps?: string;   // 加工过程
 }
 const AddFoodPage: React.FC = () => {
     const [form] = Form.useForm<FoodFormAntdData>(); // AntD Form hook
