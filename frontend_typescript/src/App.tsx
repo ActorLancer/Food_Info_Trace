@@ -1,9 +1,9 @@
 // export default App
 // import i18next from 'i18next';
 // import { initReactI18next } from 'react-i18next';
-import React, { useState, useEffect, useCallback, useRef} from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers, type Eip1193Provider, type Signer } from 'ethers';
-import { Outlet, useLocation, useNavigate, matchPath, Navigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import zhCN from 'antd/locale/zh_CN'; // 导入中文语言包
 import dayjs from 'dayjs'; // AntD 日期组件依赖 dayjs
@@ -79,7 +79,7 @@ declare global {
 
 
 const { Header, Content, Footer, Sider } = Layout;
-const { Title, Text } = Typography;
+const { Title } = Typography;
 
 // 定义菜单项
 const menuItems = [
@@ -124,7 +124,8 @@ const App: React.FC = () => {
     const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
 
     // Ref 来确保某些初始化逻辑只执行一次，或者跟踪非 state 的持久值
-    const initialLoadDone = useRef(false);
+    // const initialLoadDone = useRef(false);
+    const initialLoadAttempted = useRef(false); // 用于标记是否已尝试过首次加载时的自动连接
 
     // Ant Design v5 的主题 token
     const {
@@ -183,29 +184,38 @@ const App: React.FC = () => {
     //   }
     //   return ['/'];
     // };
+
     const getCurrentSelectedKey = useCallback(() => {
-        const patterns = [
-          { path: '/food/*', key: '/' },
-          { path: '/add-food/*', key: '/add-food' },
-          { path: '/search/*', key: '/search' },
-        ];
-        for (const { path, key } of patterns) {
-          if (matchPath(path, location.pathname)) {
-            return [key];
-          }
+        if (location.pathname.startsWith('/food/')) {
+            return ['/'];
         }
-        return location.pathname.startsWith('/food/') ? ['/'] : [menuItems.find(item => location.pathname === item.key || location.pathname.startsWith(item.key + '/'))?.key || '/'];
-    }, [location.pathname]);
+        const currentPathItem = menuItems.find(item => location.pathname === item.key || location.pathname.startsWith(item.key + '/'));
+        return currentPathItem ? [currentPathItem.key] : ['/'];
+    }, [location.pathname]); // location.pathname 是稳定的，除非路由变化
+    // const getCurrentSelectedKey = useCallback(() => {
+    //     const patterns = [
+    //       { path: '/food/*', key: '/' },
+    //       { path: '/add-food/*', key: '/add-food' },
+    //       { path: '/search/*', key: '/search' },
+    //     ];
+    //     for (const { path, key } of patterns) {
+    //       if (matchPath(path, location.pathname)) {
+    //         return [key];
+    //       }
+    //     }
+    //     return location.pathname.startsWith('/food/') ? ['/'] : [menuItems.find(item => location.pathname === item.key || location.pathname.startsWith(item.key + '/'))?.key || '/'];
+    // }, [location.pathname]);
 
     // TODO: 添加一个全局的 signerAddress state，如果很多组件都需要它
     // 或者让每个需要 signerAddress 的组件自己通过 connectWallet 获取
     // --- 连接钱包的函数 ---
-    const connectWallet = useCallback(async (isAutoTriggered = false) => { // 添加一个参数区分是否是自动连接
-        console.log(`connectWallet called. isAutoTriggered: ${isAutoTriggered}, isConnectingWallet: ${isConnectingWallet}`);
-        if (isConnectingWallet && !isAutoTriggered) {
-            console.log("connectWallet: Already connecting, exiting.");
+    const connectWallet = useCallback(async (isTriggeredBySystem = false) => { // isTriggeredBySystem: true 表示由事件或自动逻辑触发
+        console.log(`connectWallet called. isTriggeredBySystem: ${isTriggeredBySystem}, isConnectingWallet: ${isConnectingWallet}`);
+        if (isConnectingWallet && !isTriggeredBySystem) { // 如果是用户点击且已在连接中，则阻止
+            console.log("connectWallet: User click while already connecting, exiting.");
             return;
         }
+        // 对于系统触发的，允许它继续，因为它可能是对状态变化的响应
 
         setIsConnectingWallet(true);
         // setIsNetworkCorrect(true); // 重置网络状态
@@ -214,29 +224,30 @@ const App: React.FC = () => {
         if (connectionDetails) {
             console.log("connectWallet: Connection successful.", connectionDetails);
             setCurrentSigner(connectionDetails.signer);
-            setCurrentAddress(connectionDetails.signerAddress);
+            setCurrentAddress(connectionDetails.signerAddress.toLowerCase()); // 统一存储为小写
             setIsNetworkCorrect(connectionDetails.isExpectedNetwork);
-            sessionStorage.removeItem('userDisconnectedManually'); // 用户通过连接操作（非断开）清除了手动断开意图
-            if (connectionDetails.isExpectedNetwork && !isAutoTriggered) {
-                antdMessage.success(`钱包已连接: ${connectionDetails.signerAddress.substring(0,6)}...`);
+            sessionStorage.removeItem('userDisconnectedManually');
+            if (connectionDetails.isExpectedNetwork && !isTriggeredBySystem) {
+                antdMessage.success(`钱包已连接: ${connectionDetails.signerAddress.substring(0, 6)}...`);
             }
-            // 网络错误的提示已在 getProviderAndSigner 中处理
         } else {
-            // 如果不是自动触发的连接失败，才清除地址，避免自动连接失败时清除可能存在的旧地址
-            if (!isAutoTriggered) {
+            console.log("connectWallet: Connection failed or cancelled by user.");
+            // 只有当不是系统自动触发的连接失败时，才主动清空状态
+            // 系统自动触发的连接失败（如 accountsChanged 返回空）通常意味着外部状态已变，应信任该状态
+            if (!isTriggeredBySystem) {
                 setCurrentSigner(null);
                 setCurrentAddress(null);
-                setIsNetworkCorrect(true); // Or a state indicating no connection
+                setIsNetworkCorrect(true);
             }
         }
         setIsConnectingWallet(false);
-    }, [isConnectingWallet, showAppMessage]); // 移除 currentAddress，因为 connectWallet 自身不应依赖它来决定是否执行
+    }, [isConnectingWallet, showAppMessage]);   // showAppMessage 是 useCallback 的行
 
     const disconnectWallet = useCallback(() => {
         console.log("disconnectWallet called.");
         setCurrentSigner(null);
-        setCurrentAddress(null);    // 这会触发 useEffect
-        setIsNetworkCorrect(true);  // 重置网络状态
+        setCurrentAddress(null);
+        setIsNetworkCorrect(true);
         antdMessage.info('钱包已断开连接');
         // 注意：这只是清除了前端的状态，并没有真正从 Metamask 断开 DApp 的授权
         // 清除一个 localStorage 标志，表示用户已手动断开
@@ -248,55 +259,43 @@ const App: React.FC = () => {
 
     // --- 监听账户和网络变化 ---
     useEffect(() => {
-        console.log("App useEffect triggered. currentAddress:", currentAddress, "isConnectingWallet:", isConnectingWallet);
+        console.log("App useEffect triggered. currentAddress:", currentAddress, "isConnectingWallet:", isConnectingWallet, "initialLoadAttempted:", initialLoadAttempted.current);
+
         if (!window.ethereum) {
-            antdMessage.warning('请安装 Metamask 插件以使用全部功能。', 5);
+            console.warn("Metamask 未安装");
             return;
         }
 
         const handleAccountsChanged = (accounts: string[]) => {
             console.log('Metamask 账户已更改:', accounts, "Current known address:", currentAddress);
             // 清除手动断开的标志，因为账户变化是用户在 Metamask 中的主动行为
-            // sessionStorage.removeItem('userDisconnectedManually'); // 移动到 connectWallet 成功时
+            const newAddress = accounts.length > 0 ? accounts[0].toLowerCase() : null;
 
-            if (accounts.length === 0) {
+            if (newAddress === null) {
                 antdMessage.warning('钱包账户已断开，请重新连接。');
                 disconnectWallet();
-            } else if (accounts[0].toLowerCase() !== currentAddress?.toLowerCase()) { // 比较时忽略大小写
+            } else if (newAddress !== currentAddress) { // 账户已切换
                 antdMessage.info('检测到钱包账户切换，正在重新连接...');
+                // sessionStorage.removeItem('userDisconnectedManually'); // 由 connectWallet 成功时处理
                 connectWallet(true); // Treat as an auto-triggered event
             }
-            // console.log('Metamask 账户已更改:', accounts);
-            // const userDisconnected = localStorage.getItem('userDisconnectedManually') === 'true';
-
-            // if (accounts.length === 0) {
-            //     // Metamask is locked or the user has disconnected all accounts
-            //     antdMessage.warning('钱包账户已断开，请重新连接。');
-            //     // 即使用户之前手动断开，如果 Metamask 通知账户为空，也应该断开
-            //     disconnectWallet(); // disconnectWallet 内部会设置手动断开标志，这里可以考虑是否重置，或让用户再次点击连接
-            // } else if (accounts[0] !== currentAddress) {
-            //     // 账户已切换，清除手动断开标志，重新连接以获取新的 signer 和地址
-            //     // （通常也意味着需要重新验证网络）
-            //     localStorage.removeItem('userDisconnectedManually');
-            //     antdMessage.info('检测到钱包账户切换，正在重新连接...');
-            //     connectWallet(); // 重新连接会更新地址和网络状态
-            // } else if (userDisconnected && accounts[0] === currentAddress) {
-            //     // 这个分支可能较少见：账户没变，但之前是手动断开的，现在事件又来了
-            //     // 可以选择什么都不做，等待用户手动连接
-            //     console.log("账户未变，但之前是手动断开状态，不自动重连。");
-            // }
+            // 如果 newAddress === currentAddress，则什么都不做 (账户没变)
         };
 
         const handleChainChanged = (chainId: string) => {
             console.log('Metamask 网络已更改:', chainId, "Current known address:", currentAddress);            setCurrentChainId(chainId);
-            if (chainId !== APP_EXPECTED_CHAIN_ID) {
-                setIsWrongNetwork(true);
-                antdMessage.error(`请切换到 ${APP_EXPECTED_NETWORK_NAME} (Chain ID: ${APP_EXPECTED_CHAIN_ID})`);
-            } else {
-                setIsWrongNetwork(false);
-                antdMessage.success('网络已切换至正确网络。');
-                connectWallet(); // 确保切换到正确网络后更新状态
+            if (currentAddress) { // 只有当钱包已连接时才响应网络变化
+                antdMessage.warning('检测到网络切换，正在重新验证网络状态...', 3);
+                connectWallet(true); // 作为系统触发事件
             }
+            // if (chainId !== APP_EXPECTED_CHAIN_ID) {
+            //     setIsWrongNetwork(true);
+            //     antdMessage.error(`请切换到 ${APP_EXPECTED_NETWORK_NAME} (Chain ID: ${APP_EXPECTED_CHAIN_ID})`);
+            // } else {
+            //     setIsWrongNetwork(false);
+            //     antdMessage.success('网络已切换至正确网络。');
+            //     connectWallet(); // 确保切换到正确网络后更新状态
+            // }
 
             // antdMessage.warning('检测到网络切换，正在重新验证网络状态...', 3);
             // // Metamask 建议重载页面，但我们尝试重新连接获取新状态
@@ -304,18 +303,20 @@ const App: React.FC = () => {
             // connectWallet(); // 重新连接会更新地址和网络状态
         };
 
-        // --- 自动连接逻辑 (只在组件首次有效渲染后尝试) ---
-        if (!initialLoadDone.current) {
+        // --- 初始加载时的自动连接逻辑 ---
+        if (!initialLoadAttempted.current) {
             const userDisconnectedManually = sessionStorage.getItem('userDisconnectedManually') === 'true';
-            console.log("useEffect: Initial load check. selectedAddress:", window.ethereum.selectedAddress, "currentAddress:", currentAddress, "isConnectingWallet:", isConnectingWallet, "userDisconnectedManually:", userDisconnectedManually);
+            const selectedAddressFromMetamask = window.ethereum.selectedAddress ? window.ethereum.selectedAddress.toLowerCase() : null;
 
-            if (window.ethereum.selectedAddress && !currentAddress && !isConnectingWallet && !userDisconnectedManually) {
+            console.log("useEffect: Initial load check. selectedAddressFromMetamask:", selectedAddressFromMetamask, "currentAddress (state):", currentAddress, "isConnectingWallet:", isConnectingWallet, "userDisconnectedManually:", userDisconnectedManually);
+
+            if (selectedAddressFromMetamask && !currentAddress && !isConnectingWallet && !userDisconnectedManually) {
                 console.log("useEffect: Attempting initial auto-connect.");
-                connectWallet(true);
+                connectWallet(true); // 作为系统触发事件
             }
-            initialLoadDone.current = true; // 标记首次加载逻辑已执行
+            initialLoadAttempted.current = true; // 标记首次加载逻辑已执行，无论是否连接成功
         }
-        // --- 结束自动连接逻辑 ---
+        // --- 结束初始加载逻辑 ---
 
         // 初始检查网络和账户
         const initialize = async () => {
@@ -345,89 +346,15 @@ const App: React.FC = () => {
 
         // 清理监听器
         return () => {
+            console.log("App useEffect cleanup: Removing listeners for accountsChanged and chainChanged.");
             if (window.ethereum?.removeListener) {
                 window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
                 window.ethereum.removeListener('chainChanged', handleChainChanged);
             }
         };
+        // 依赖项保持不变，因为 connectWallet 和 disconnectWallet 已经是 useCallback 的
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentAddress, connectWallet, disconnectWallet, isConnectingWallet]); // 当 currentAddress 或 connectWallet 变化时，确保监听器正确设置/移除
-    // connectWallet 用了 useCallback，所以通常不会频繁变化
-
-
-    // useEffect(() => {
-    //     const { ethereum } = window;
-    //     if (ethereum && ethereum.isMetaMask) {
-    //         // 初始网络检查
-    //         const checkNetwork = async () => {
-    //             try {
-    //                 const chainId = await ethereum.request({ method: 'eth_chainId' }) as string;
-    //                 setCurrentChainId(chainId);
-    //                 if (chainId !== APP_EXPECTED_CHAIN_ID) {
-    //                     setIsWrongNetwork(true);
-    //                     console.warn(`网络不匹配: 当前 ${chainId}, 期望 ${APP_EXPECTED_CHAIN_ID}`);
-    //                 } else {
-    //                     setIsWrongNetwork(false);
-    //                 }
-    //             } catch (err) {
-    //                 console.error("检查网络失败:", err);
-    //                 // 可能 Metamask 未连接或有问题
-    //             }
-    //         };
-    //         checkNetwork();
-
-    //         // 监听网络变化事件
-    //         const handleChainChanged = (newChainId: string) => {
-    //             console.log('网络已切换:', newChainId);
-    //             setCurrentChainId(newChainId);
-    //             if (newChainId !== APP_EXPECTED_CHAIN_ID) {
-    //                 setIsWrongNetwork(true);
-    //                 // 可以选择强制刷新页面，因为网络切换可能导致之前的状态失效
-    //                 // window.location.reload();
-    //                 // 或者只是显示提示
-    //             } else {
-    //                 setIsWrongNetwork(false);
-    //                 // 如果之前是错误网络，现在切换回来了，可以考虑自动刷新或提示用户
-    //                 // window.location.reload(); // 切换回正确网络后刷新以确保状态一致
-    //             }
-    //         };
-
-    //         ethereum.on('chainChanged', handleChainChanged);
-
-    //         // 监听账户变化事件
-    //         const handleAccountsChanged = (accounts: string[]) => {
-    //             console.log('账户已切换:', accounts);
-    //             if (accounts.length === 0) {
-    //                 // Metamask锁定了或用户断开了所有账户的连接
-    //                 antdMessage.warning('Metamask 已锁定或账户已断开连接。');
-    //                 // TODO: 在这里可以清除应用中与账户相关的状态，可选：
-    //                 // setGlobalSignerAddress(null);
-    //                 // navigate('/'); // 可能导航回首页
-    //                 // 通常也可以刷新页面以重置状态
-    //                 window.location.reload();
-    //             } else {
-    //                 // 账户切换
-    //                 const newAddress = accounts[0];
-    //                 antdMessage.info(`账户已切换到: ${newAddress.substring(0,6)}...${newAddress.substring(newAddress.length - 4)}`);
-    //                 // 更新全局账户状态（如果需要）
-    //                 // setGlobalSignerAddress(newAddress);
-    //                 // 强制刷新页面以确保所有组件都使用新的账户信息重新初始化
-    //                 // 最简单直接的处理方式，避免状态不一致
-    //                 window.location.reload();
-    //             }
-    //         };
-
-    //         ethereum.on('accountsChanged', handleAccountsChanged);
-
-    //         // 组件卸载时移除监听器
-    //         return () => {
-    //             if (ethereum && ethereum.isMetaMask) { // 添加 ethereum 检查
-    //                 ethereum.removeListener('chainChanged', handleChainChanged);
-    //                 ethereum.removeListener('accountsChanged', handleAccountsChanged);
-    //             }
-    //         };
-    //     }
-    // }, []); // 依赖数组保持为空
 
     const handleSwitchNetworkInModal = async () => {
         if (window.ethereum) {
@@ -524,9 +451,9 @@ const App: React.FC = () => {
                     <Menu
                         theme="dark"
                         mode="inline"
-                        selectedKeys={getCurrentSelectedKey()}
+                        selectedKeys={getCurrentSelectedKey()} // 已 useCallback
+                        onClick={handleMenuClick} // 已 useCallback
                         items={menuItems}
-                        onClick={handleMenuClick}
                     />
                 </Sider>
                 <Layout>
@@ -586,7 +513,7 @@ const App: React.FC = () => {
                                 />
                             )}
                             {/* 确保 WalletContextType 定义在某处，并且 Outlet context 传递正确 */}
-                            <Outlet context={{ currentAddress, currentSigner, isNetworkCorrect, connectWallet } satisfies WalletContextType} />                        </div>
+                            <Outlet context={{ currentAddress, currentSigner, isNetworkCorrect, connectWallet } satisfies WalletContextType} />                       </div>
                     </Content>
                     <Footer style={{ textAlign: 'center' }}>
                         食品溯源平台 ©{new Date().getFullYear()} CBy Luna
@@ -594,7 +521,7 @@ const App: React.FC = () => {
                 </Layout>
             </Layout>
             {/* 错误网络提示模态框 */}
-            // 允许用户关闭模态框，并通过页面上的 Alert 继续提醒网络错误。
+            {/* 允许用户关闭模态框，并通过页面上的 Alert 继续提醒网络错误。 */}
             <Modal
                 title="网络错误"
                 open={isWrongNetwork}
