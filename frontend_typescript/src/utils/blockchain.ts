@@ -176,7 +176,7 @@ const FOOD_TRACEABILITY_ABI = [
 ];
 
 // 定义期望的网络信息 (Hardhat 本地网络)，用于导出配置
-export const EXPECTED_CHAIN_ID = "0x539"; // 1337 的十六进制形式 (默认为：0x7A69 for 31337)
+export const EXPECTED_CHAIN_ID = "0x539"; // 期望的 Hardhat 本地网络 Chain ID，1337 的十六进制形式 (默认为：0x7A69 for 31337)
 export const EXPECTED_NETWORK_NAME = "Hardhat Local"; // 添加网络时的提示
 export const EXPECTED_RPC_URL = "http://127.0.0.1:8545"; // Hardhat RPC
 export const EXPECTED_CURRENCY_SYMBOL = "ETH"; // or "GO"
@@ -243,31 +243,50 @@ const switchToExpectedNetwork = async (provider: BrowserProvider): Promise<boole
 };
 
 // 获取 Provider 和 Signer
-export const getProviderAndSigner = async (): Promise<{
+export const getProviderAndSigner = async (
+  showAlert: (message: string, type: "error" | "warning" | "info") => void = alert, // 默认使用 alert，可以传入自定义的提示函数
+): Promise<{
   provider: BrowserProvider;
   signer: Signer;
   signerAddress: string;
+  isExpectedNetwork: boolean; // 新增：返回当前网络是否是期望的网络
 } | null> => {
   if (!window.ethereum) {
-    alert("请安装 Metamask 插件!");
+    showAlert("请安装 Metamask 插件!", "error");
     return null;
   }
 
   try {
-    const provider = new ethers.BrowserProvider(window.ethereum, "any"); // TODO: "any" 允许连接到任何网络（稍后检查）
+    // const provider = new ethers.BrowserProvider(window.ethereum, "any"); // TODO: "any" 允许连接到任何网络（稍后检查）
+    const provider = new ethers.BrowserProvider(window.ethereum);
+
+    // 请求账户权限
+    // 这个调用也会触发 Metamask 如果没有连接到任何账户
+    await provider.send("eth_requestAccounts", []);
+    const signer = await provider.getSigner();
+    const signerAddress = await signer.getAddress();
 
     // 1. 检查当前网络
     const network = await provider.getNetwork();
     const currentChainId = `0x${network.chainId.toString(16)}`; // 获取当前 chainId 并转为十六进制字符串
 
-    if (currentChainId !== EXPECTED_CHAIN_ID) {
-      alert(
-        `请切换到 ${EXPECTED_NETWORK_NAME} (Chain ID: ${EXPECTED_CHAIN_ID})。\n您当前连接的网络是: ${network.name} (Chain ID: ${currentChainId})`,
+    console.log("当前连接的网络 Chain ID:", currentChainId);
+    console.log("期望的网络 Chain ID:", EXPECTED_CHAIN_ID);
+
+    const isExpectedNetwork = currentChainId === EXPECTED_CHAIN_ID;
+
+    if (!isExpectedNetwork) {
+      showAlert(
+        `请将您的 Metamask 网络切换到 ${EXPECTED_NETWORK_NAME} (Chain ID: ${EXPECTED_CHAIN_ID}). 当前网络 Chain ID: ${currentChainId}`,
+        "warning",
       );
-      const switched = await switchToExpectedNetwork(provider);
-      if (!switched) {
-        return null; // 如果切换失败或用户取消，则不继续
-      }
+
+      // TODO
+      // const switched = await switchToExpectedNetwork(provider);
+      // if (!switched) {
+      //   return null; // 如果切换失败或用户取消，则不继续
+      // }
+
       // 切换网络后，Metamask 通常会刷新页面，或者 provider/signer 可能需要重新获取
       // 为简单起见，这里可以提示用户刷新页面，或者理想情况下是重新执行连接逻辑
       // 对于更流畅的体验，切换成功后可以再次调用 provider.getSigner()
@@ -275,13 +294,12 @@ export const getProviderAndSigner = async (): Promise<{
       // TODO: 这里假设如果切换成功，后续的 eth_requestAccounts 会在正确的网络上进行
     }
 
-    // 2. 请求账户权限 (如果网络正确或已成功切换)
-    await provider.send("eth_requestAccounts", []);
-    const signer = await provider.getSigner();
-    const signerAddress = await signer.getAddress();
+    // 2. 请求账户权限 (如果网络正确或已成功切换)，前置
 
     console.log(`成功连接到钱包: ${signerAddress} 在网络: ${network.name} (ID: ${currentChainId})`);
-    return { provider, signer, signerAddress };
+    // 即使网络不正确，仍然返回 provider 和 signer，让调用方决定如何处理
+    // 但是会标记 isExpectedNetwork
+    return { provider, signer, signerAddress, isExpectedNetwork };
   } catch (err: unknown) {
     // 修改为 unknown
     console.error("连接 Metamask 或处理网络切换失败:", err);
@@ -307,7 +325,8 @@ export const getProviderAndSigner = async (): Promise<{
     } else if (typeof err === "string") {
       alertMessage = err; // 如果错误本身就是字符串
     }
-    alert(alertMessage);
+
+    showAlert(alertMessage, "error");
     return null;
   }
 };

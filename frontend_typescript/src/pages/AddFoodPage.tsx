@@ -7,7 +7,7 @@ import {
 import { WalletOutlined, CloudUploadOutlined, /* CheckCircleOutlined, WarningOutlined */ } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs'; // Dayjs 只作用类型
 import type { ValidateErrorEntity } from 'rc-field-form/lib/interface'; // 用于 onFinishFailed
-import { getProviderAndSigner, getFoodTraceabilityContract, calculateMetadataHash } from '../utils/blockchain';
+import { EXPECTED_NETWORK_NAME, EXPECTED_CHAIN_ID, getProviderAndSigner, getFoodTraceabilityContract, calculateMetadataHash } from '../utils/blockchain';
 import 'dayjs/locale/zh-cn';
 dayjs.locale('zh-cn'); // 全局设置
 
@@ -51,23 +51,76 @@ const AddFoodPage: React.FC = () => {
     // const [message, setMessage] = useState<string>(''); // 使用 antdMessage 替代
     const [submissionStatus, setSubmissionStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
     const [statusMessage, setStatusMessage] = useState<string>('');
+    const [isWrongNetwork, setIsWrongNetwork] = useState<boolean>(false); // 新增状态：是否连接到错误网络
+
+    // 自定义的 antd 提示函数
+    const showAntdMessage = (message: string, type: 'error' | 'warning' | 'info' | 'success') => {
+        switch (type) {
+            case 'error': antdMessage.error(message); break;
+            case 'warning': antdMessage.warning(message); break;
+            case 'info': antdMessage.info(message); break;
+            case 'success': antdMessage.success(message); break;
+            default: antdMessage.info(message);
+        }
+    };
+
     const connectWallet = async () => {
         setIsLoading(true);
         // setMessage('');
         setSubmissionStatus('idle');
         setStatusMessage('');
-        const connection = await getProviderAndSigner();
+        setIsWrongNetwork(false); // 重置网络状态
+
+        // const connection = await getProviderAndSigner();
+        // 将自定义的 antdMessage 函数作为 showAlert 传递
+        const connection = await getProviderAndSigner(showAntdMessage);
+
         if (connection) {
             setSigner(connection.signer);
             setSignerAddress(connection.signerAddress);
             const foodContract = getFoodTraceabilityContract(connection.signer);
             setContract(foodContract);
-            antdMessage.success(`钱包已连接: ${connection.signerAddress.substring(0,6)}...${connection.signerAddress.substring(connection.signerAddress.length - 4)}`);
+
+            if (connection.isExpectedNetwork) {
+                antdMessage.success(`钱包已连接: ${connection.signerAddress.substring(0,6)}...${connection.signerAddress.substring(connection.signerAddress.length - 4)}`);
+                setIsWrongNetwork(false);
+            } else {
+                // getProviderAndSigner 内部已经调用了 showAlert，这里可以只更新状态
+                setIsWrongNetwork(true);
+                // 或者再额外提示一次，如果需要更强的页面级提示
+                // antdMessage.warning(`请切换到 ${EXPECTED_NETWORK_NAME} 网络。`, 5);
+            }
         } else {
-            antdMessage.error('连接钱包失败。');
+            // getProviderAndSigner 内部已经调用了 showAlert
+            // antdMessage.error('连接钱包失败。'); // 无需重复
         }
         setIsLoading(false);
     };
+
+    // 监听网络变化 (更健壮)
+    useEffect(() => {
+        const handleChainChanged = (_chainId: string) => {
+            // Metamask 建议在网络变化后重新加载页面以确保状态一致性
+            // window.location.reload();
+            // 或者，我们可以尝试重新连接和检查网络
+            console.log("网络已更改，尝试重新验证钱包连接和网络...");
+            // 如果已经连接了钱包，则重新执行连接和检查逻辑
+            if (signerAddress) {
+                connectWallet();
+            }
+        };
+
+        if (window.ethereum?.on) {
+            window.ethereum.on('chainChanged', handleChainChanged);
+        }
+
+        // 清理监听器
+        return () => {
+            if (window.ethereum?.removeListener) {
+                window.ethereum.removeListener('chainChanged', handleChainChanged);
+            }
+        };
+    }, [signerAddress]); // 当 signerAddress 变化时（表示已连接或断开），重新设置监听器或逻辑
 
     // 页面加载时尝试自动连接
     useEffect(() => {
@@ -75,12 +128,19 @@ const AddFoodPage: React.FC = () => {
              connectWallet();
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, []); // 依赖 signerAddress 避免在已连接时重复调用
+
     const onFinish = async (values: FoodFormAntdData) => {
         if (!signer || !contract) {
             antdMessage.error('请先连接钱包。');
             return;
         }
+
+        if (isWrongNetwork) { // 在提交前检查网络状态
+            antdMessage.error(`操作失败：请先将您的 Metamask 网络切换到 ${EXPECTED_NETWORK_NAME} (Chain ID: ${EXPECTED_CHAIN_ID})。`);
+            return;
+        }
+
         console.log('表单提交数据 (AntD):', values);
         setIsLoading(true);
         setSubmissionStatus('processing');
@@ -192,6 +252,7 @@ const AddFoodPage: React.FC = () => {
         <div>
             <Title level={4} style={{ marginBottom: 24 }}>录入新食品信息</Title>
 
+            {/* 连接按钮和显示已连接地址和断开按钮 */}
             {!signerAddress ? (
                 <Space direction="vertical" align="center" style={{width: '100%'}}>
                     <Button type="primary" icon={<WalletOutlined />} onClick={connectWallet} loading={isLoading} size="large">
@@ -208,6 +269,16 @@ const AddFoodPage: React.FC = () => {
                 </Text>
             )}
 
+            {isWrongNetwork && signerAddress && ( // 当钱包已连接但网络错误时显示提示
+                <Alert
+                    message="网络错误"
+                    description={`您当前连接的网络不是 ${EXPECTED_NETWORK_NAME} (Chain ID: ${EXPECTED_CHAIN_ID})。请切换网络后才能进行操作。`}
+                    type="warning"
+                    showIcon
+                    style={{ marginBottom: 16 }}
+                />
+            )}
+
             {/* {message && <Alert message={message.startsWith('错误') || message.startsWith('Metamask 错误') ? "错误" : "提示"} description={message} type={message.startsWith('错误') || message.startsWith('Metamask 错误') ? "error" : "info"} showIcon style={{ marginBottom: 16 }} />} */}
 
             {submissionStatus === 'processing' && <Spin tip={statusMessage} style={{display: 'block', marginBottom: 16}}><Alert message="处理中" description={statusMessage} type="info" /></Spin>}
@@ -221,7 +292,8 @@ const AddFoodPage: React.FC = () => {
                     onFinish={onFinish}
                     onFinishFailed={onFinishFailed}
                     autoComplete="off"
-                    disabled={isLoading} // 表单在加载时禁用
+                    // disabled={isLoading} // 表单在加载时禁用
+                    disabled={isLoading || isWrongNetwork} // 当网络错误时也禁用表单
                 >
                     <Form.Item
                         label="产品ID (批次号)"
@@ -270,7 +342,7 @@ const AddFoodPage: React.FC = () => {
 
 
                     <Form.Item {...tailFormItemLayout}>
-                        <Button type="primary" htmlType="submit" loading={isLoading} icon={<CloudUploadOutlined />}>
+                        <Button type="primary" htmlType="submit" loading={isLoading} icon={<CloudUploadOutlined />} disabled={isLoading || isWrongNetwork}>
                             {isLoading ? '正在提交...' : '提交到区块链并保存'}
                         </Button>
                     </Form.Item>

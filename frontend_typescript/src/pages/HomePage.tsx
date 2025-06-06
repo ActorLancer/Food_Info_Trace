@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom'; // 使用 useNavigate 替代 Link 进行编程式导航
-import { Table, Button, Space, Tooltip, Spin, Alert, Typography, Tag } from 'antd'; // 引入 AntD 组件
+import { Table, Button, Space, Tooltip, Spin, Alert, Typography, Tag, type TableProps } from 'antd'; // 引入 AntD 组件
 import { EyeOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'; // 引入图标
 
 const { Title, Text } = Typography;
@@ -11,6 +11,15 @@ interface FoodListItemFromAPI {
     onchain_metadata_hash: string;
     created_at: string; // 后端返回的是 ISO 格式字符串
     product_name: string | null;
+}
+
+// 定义后端分页响应的完整结构
+interface PaginatedApiResponse {
+    items: FoodListItemFromAPI[];
+    total_items: number;
+    page: number;
+    page_size: number;
+    total_pages: number;
 }
 
 // 定义 Table 组件的列配置
@@ -76,36 +85,75 @@ const HomePage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const navigate = useNavigate(); // 获取 navigate 函数
 
+    // 新增分页状态
+    const [pagination, setPagination] = useState({
+        current: 1,
+        pageSize: 10, // 与后端默认值一致
+        total: 0,     // 总记录数
+    });
+
+    // fetchFoodList 函数需要接受分页参数
+    const fetchFoodList = async (page: number = pagination.current, pageSize: number = pagination.pageSize) => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            // 在 URL 中添加分页参数
+            const response = await fetch(`/api/food-records?page=${page}&page_size=${pageSize}`);
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: `获取食品列表失败: ${response.statusText} (状态码: ${response.status})` }));
+                throw new Error(errorData.message || `获取食品列表失败: ${response.statusText} (状态码: ${response.status})`);
+            }
+            const data: PaginatedApiResponse = await response.json(); // md 点1: 期望 PaginatedApiResponse 类型
+
+            setFoodList(data.items); // md 点2: 使用 data.items 设置列表
+            setPagination(prev => ({ // 修改点3: 更新分页状态
+                ...prev,
+                current: data.page,
+                pageSize: data.page_size,
+                total: data.total_items,
+            }));
+
+        } catch (err) {
+            if (err instanceof Error) {
+                setError(err.message);
+            } else {
+                setError('获取食品列表时发生未知错误');
+            }
+            console.error("获取食品列表错误:", err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     useEffect(() => {
-            const fetchFoodList = async () => {
-                setIsLoading(true);
-                setError(null);
-                try {
-                    const response = await fetch('/api/food-records');
-                    if (!response.ok) {
-                        const errorData = await response.json().catch(() => ({ message: `获取食品列表失败: ${response.statusText} (状态码: ${response.status})` }));
-                        throw new Error(errorData.message || `获取食品列表失败: ${response.statusText} (状态码: ${response.status})`);
-                    }
-                    const data: FoodListItemFromAPI[] = await response.json();
-                    setFoodList(data);
-                } catch (err) {
-                    if (err instanceof Error) {
-                        setError(err.message);
-                    } else {
-                        setError('获取食品列表时发生未知错误');
-                    }
-                    console.error("获取食品列表错误:", err);
-                } finally {
-                    setIsLoading(false);
-                }
-            };
-            fetchFoodList();
-        }, []);
+        fetchFoodList(pagination.current, pagination.pageSize); // 初始加载时使用默认分页参数
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // 导航按钮的处理函数
     const handleNavigate = (path: string) => {
         navigate(path);
     };
+
+    // AntD Table 的 onChange 事件处理器，用于处理分页、排序、筛选变化
+    const handleTableChange: TableProps<FoodListItemFromAPI>['onChange'] = (
+        newPagination,
+        _filters, // 我们暂时不使用筛选
+        _sorter   // 我们暂时让 Table 自身处理排序，如果需要服务器端排序则需处理此参数
+    ) => {
+        // 当页码或每页数量变化时，重新获取数据
+        if (newPagination.current && newPagination.pageSize) {
+             // 更新本地分页状态，并触发数据重新获取
+            // setPagination(prev => ({
+            //     ...prev,
+            //     current: newPagination.current || 1,
+            //     pageSize: newPagination.pageSize || 10,
+            // }));
+            // 直接调用 fetchFoodList，它会更新状态
+            fetchFoodList(newPagination.current, newPagination.pageSize);
+        }
+    };
+
     if (error) { // 优先显示错误
         return <Alert message="加载错误" description={error} type="error" showIcon closable />;
     }
@@ -125,14 +173,31 @@ const HomePage: React.FC = () => {
                 </Space>
 
                 <Spin spinning={isLoading} tip="正在加载数据...">
+                    {/* <Table
+                        columns={columns(navigate)}
+                        dataSource={foodList}
+                        rowKey="product_id"
+                        pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: ['10', '20', '50'] }} // 添加分页配置
+                        bordered
+                        size="middle"
+                        scroll={{ x: 'max-content' }}
+                    /> */}
                     <Table
                         columns={columns(navigate)} // 将 navigate 传递给 columns 函数
-                        dataSource={foodList}
+                        dataSource={foodList} // dataSource 现在是正确的数组了
                         rowKey="product_id" // 指定每行的唯一 key
-                        pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: ['10', '20', '50'] }} // 添加分页配置
-                        bordered // 添加边框
-                        size="middle" // 表格尺寸
-                        scroll={{ x: 'max-content' }} // 水平滚动，当内容超出时
+                        pagination={{ // md 点4: 将 Table 的分页与我们的 state 联动
+                            current: pagination.current,
+                            pageSize: pagination.pageSize,
+                            total: pagination.total,
+                            showSizeChanger: true,
+                            pageSizeOptions: ['5', '10', '20', '50'], // 可以自定义每页数量选项
+                            showTotal: (total, range) => `显示 ${range[0]}-${range[1]} 条，共 ${total} 条`,
+                        }}
+                        onChange={handleTableChange} // md 点5: 添加 onChange 处理器
+                        bordered    // 添加边框
+                        size="middle"   // 表格尺寸
+                        scroll={{ x: 'max-content' }}   // 水平滚动，当内容超出时
                     />
                 </Spin>
                 {foodList.length === 0 && !isLoading && !error && ( // 仅在非加载、无错误且列表为空时显示

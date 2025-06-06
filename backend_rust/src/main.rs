@@ -70,6 +70,22 @@ struct RawFoodListItem {
     created_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[derive(Serialize, Debug)]
+struct PaginatedFoodListResponse {
+    items: Vec<FoodListItem>, // 当前页的数据项
+    total_items: i64,         // 总记录数
+    page: i64,                // 当前页码
+    page_size: i64,           // 每页大小
+    total_pages: i64,         // 总页数
+}
+
+// 定义分页查询参数的结构体
+#[derive(Deserialize, Debug)]
+struct PaginationParams {
+    page: Option<i64>,     // 当前页码 (可选)
+    page_size: Option<i64>, // 每页大小 (可选)
+}
+
 
 #[get("/health")]
 async fn health_check() -> impl Responder {
@@ -152,20 +168,58 @@ async fn create_food_record(
 #[get("/api/food-records")]
 async fn get_food_records_list(
     app_state: web::Data<AppState>,
+    query_params: web::Query<PaginationParams>, // 从查询字符串中提取分页参数
 ) -> impl Responder {
-    println!("接收到获取食品列表的请求 (含产品名称)");
+    println!("接收到获取食品列表的请求 (分页): {:?}", query_params);
 
+    let page = query_params.page.unwrap_or(1).max(1); // 默认第1页，最小为1
+    let page_size = query_params.page_size.unwrap_or(10).max(1); // 默认每页10条，最小为1
+    let offset = (page - 1) * page_size;
+
+    // 1. 查询总记录数
+    let total_items_result = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) as "count!: i64" FROM traceability_data"#
+    )
+    .fetch_one(&app_state.db_pool)
+    .await;
+
+    let total_items = match total_items_result {
+        Ok(count) => count,
+        Err(e) => {
+            eprintln!("数据库查询总记录数错误: {:?}", e);
+            return HttpResponse::InternalServerError().json(GenericResponse {
+                status: "error".to_string(),
+                message: "获取食品列表数据失败 (无法获取总数)。".to_string(),
+            });
+        }
+    };
+
+    if total_items == 0 { // 如果没有记录，直接返回空列表和分页信息
+        println!("数据库中没有食品记录。");
+        return HttpResponse::Ok().json(PaginatedFoodListResponse {
+            items: Vec::new(),
+            total_items: 0,
+            page,
+            page_size,
+            total_pages: 0,
+        });
+    }
+
+    // 2. 查询当前页的数据
     let query_result = sqlx::query_as!(
-        RawFoodListItem, // 查询结果映射到 RawFoodListItem
+        RawFoodListItem,
         r#"
         SELECT
-            product_id as "product_id!", -- 断言 product_id 不为 NULL
-            CAST(metadata_json AS CHAR) as "metadata_json!", -- 断言 CAST 结果不为 NULL
-            onchain_metadata_hash as "onchain_metadata_hash!", -- 断言哈希不为 NULL
+            product_id as "product_id!",
+            CAST(metadata_json AS CHAR) as "metadata_json!",
+            onchain_metadata_hash as "onchain_metadata_hash!",
             created_at as "created_at!: chrono::DateTime<chrono::Utc>"
         FROM traceability_data
         ORDER BY created_at DESC
-        "#
+        LIMIT ? OFFSET ?
+        "#,
+        page_size, // LIMIT
+        offset     // OFFSET
     )
     .fetch_all(&app_state.db_pool)
     .await;
@@ -173,35 +227,38 @@ async fn get_food_records_list(
     match query_result {
         Ok(raw_records) => {
             let mut food_list_items: Vec<FoodListItem> = Vec::new();
-
             for raw_record in raw_records {
                 let product_name: Option<String> = match serde_json::from_str::<JsonValue>(&raw_record.metadata_json) {
-                    Ok(metadata_value) => {
-                        metadata_value.get("productName").and_then(|v| v.as_str()).map(String::from)
-                    }
+                    Ok(metadata_value) => metadata_value.get("productName").and_then(|v| v.as_str()).map(String::from),
                     Err(e) => {
                         eprintln!("解析产品ID {} 的元数据失败 (列表): {:?}", raw_record.product_id, e);
                         None
                     }
                 };
-
-                // 确保 FoodListItem 结构体定义包含 product_name
                 food_list_items.push(FoodListItem {
                     product_id: raw_record.product_id,
-                    product_name, // 这个 product_name 是 Option<String> 类型
+                    product_name,
                     onchain_metadata_hash: raw_record.onchain_metadata_hash,
                     created_at: raw_record.created_at,
                 });
             }
 
-            println!("成功从数据库获取 {} 条食品记录列表 (含产品名称)", food_list_items.len());
-            HttpResponse::Ok().json(food_list_items)
+            let total_pages = (total_items as f64 / page_size as f64).ceil() as i64;
+
+            println!("成功从数据库获取 {} 条食品记录列表 (分页)，总记录数: {}", food_list_items.len(), total_items);
+            HttpResponse::Ok().json(PaginatedFoodListResponse {
+                items: food_list_items,
+                total_items,
+                page,
+                page_size,
+                total_pages,
+            })
         }
         Err(e) => {
-            eprintln!("数据库查询食品列表错误 (含产品名称): {:?}", e);
+            eprintln!("数据库查询食品列表错误 (分页): {:?}", e);
             HttpResponse::InternalServerError().json(GenericResponse {
                 status: "error".to_string(),
-                message: "获取食品列表失败。".to_string(),
+                message: "获取食品列表数据失败。".to_string(),
             })
         }
     }
