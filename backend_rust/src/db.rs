@@ -3,14 +3,14 @@ use crate::models::{
     FoodRecordRequest, FoodListItem, RawFoodListItem, FoodRecordDetail,
     PaginatedFoodListResponse, PaginationParams
 };
+use crate::errors::AppError; // 引入自定义错误
 use serde_json::Value as JsonValue;
 
 pub async fn create_food_record_db(
-    pool:&MySqlPool,
-    record_data: &FoodRecordRequest
-) -> Result<u64, sqlx::Error> { // 返回影响的行数或错误
-    let metadata_string = serde_json::to_string(&record_data.metadata)
-        .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;    // 将 serde 错误转换为 sqlx::Error::Decode
+    pool: &MySqlPool,
+    record_data: &FoodRecordRequest,
+) -> Result<u64, AppError> { // 返回 AppError
+    let metadata_string = serde_json::to_string(&record_data.metadata)?; // '?' 会自动调用 From<serde_json::Error>
 
     let result = sqlx::query!(
         r#"
@@ -22,16 +22,16 @@ pub async fn create_food_record_db(
         record_data.transaction_hash
     )
     .execute(pool)
-    .await?;
-
+    .await?; // '?' 会自动调用 From<SqlxError>
     Ok(result.rows_affected())
 }
+
 
 // 示例：获取食品列表的数据库逻辑
 pub async fn get_food_records_list_db(
     pool: &MySqlPool,
     params: &PaginationParams,
-) -> Result<PaginatedFoodListResponse, sqlx::Error> {
+) -> Result<PaginatedFoodListResponse, AppError> {
     let page = params.page.unwrap_or(1).max(1);
     let page_size = params.page_size.unwrap_or(10).max(1);
     let offset = (page - 1) * page_size;
@@ -80,8 +80,8 @@ pub async fn get_food_records_list_db(
 pub async fn get_food_record_detail_db(
     pool: &MySqlPool,
     product_id: &str,
-) -> Result<Option<FoodRecordDetail>, sqlx::Error> { // 返回 Option 因为可能找不到
-    sqlx::query_as!(
+) -> Result<FoodRecordDetail, AppError> { // 返回 FoodRecordDetail 而不是 Option，通过 AppError::NotFound 处理未找到的情况
+    let record = sqlx::query_as!(
         FoodRecordDetail,
         r#"
         SELECT product_id, metadata_json, onchain_metadata_hash, blockchain_transaction_hash,
@@ -91,6 +91,8 @@ pub async fn get_food_record_detail_db(
         "#,
         product_id
     )
-    .fetch_optional(pool)
-    .await
+        .fetch_optional(pool) // 仍然使用 fetch_optional
+        .await? // 将 SqlxError 转为 AppError (如果不是 RowNotFound)
+        .ok_or_else(|| AppError::NotFound(format!("未找到产品ID为 '{}' 的食品记录。", product_id)))?; // 如果是 None (RowNotFound)，转为 AppError::NotFound
+    Ok(record)
 }
