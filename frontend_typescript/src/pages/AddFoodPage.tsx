@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { type Signer, type Contract, type Eip1193Provider } from 'ethers';
 import {
     Form, Input, Button, DatePicker, Spin, Alert, Typography, Space, message as antdMessage, Tag, // 添加 Tag
@@ -54,17 +54,38 @@ const AddFoodPage: React.FC = () => {
     const [isWrongNetwork, setIsWrongNetwork] = useState<boolean>(false); // 新增状态：是否连接到错误网络
 
     // 自定义的 antd 提示函数
-    const showAntdMessage = (message: string, type: 'error' | 'warning' | 'info' | 'success') => {
+    const showAntdMessage = useCallback(
+      (message: string, type: 'error' | 'warning' | 'info' | 'success') => {
         switch (type) {
-            case 'error': antdMessage.error(message); break;
-            case 'warning': antdMessage.warning(message); break;
-            case 'info': antdMessage.info(message); break;
-            case 'success': antdMessage.success(message); break;
-            default: antdMessage.info(message);
+          case 'error':
+            antdMessage.error(message);
+            break;
+          case 'warning':
+            antdMessage.warning(message);
+            break;
+          case 'info':
+            antdMessage.info(message);
+            break;
+          case 'success':
+            antdMessage.success(message);
+            break;
+          default:
+            antdMessage.info(message);
         }
-    };
+      },
+      [] // 依赖数组为空，说明它不依赖外部变量
+    );
+    // const showAntdMessage = (message: string, type: 'error' | 'warning' | 'info' | 'success') => {
+    //     switch (type) {
+    //         case 'error': antdMessage.error(message); break;
+    //         case 'warning': antdMessage.warning(message); break;
+    //         case 'info': antdMessage.info(message); break;
+    //         case 'success': antdMessage.success(message); break;
+    //         default: antdMessage.info(message);
+    //     }
+    // };
 
-    const connectWallet = async () => {
+    const connectWallet = useCallback(async () => {
         setIsLoading(true);
         // setMessage('');
         setSubmissionStatus('idle');
@@ -95,7 +116,41 @@ const AddFoodPage: React.FC = () => {
             // antdMessage.error('连接钱包失败。'); // 无需重复
         }
         setIsLoading(false);
-    };
+    }, [showAntdMessage]);
+
+
+    // const connectWallet = async () => {
+    //     setIsLoading(true);
+    //     // setMessage('');
+    //     setSubmissionStatus('idle');
+    //     setStatusMessage('');
+    //     setIsWrongNetwork(false); // 重置网络状态
+
+    //     // const connection = await getProviderAndSigner();
+    //     // 将自定义的 antdMessage 函数作为 showAlert 传递
+    //     const connection = await getProviderAndSigner(showAntdMessage);
+
+    //     if (connection) {
+    //         setSigner(connection.signer);
+    //         setSignerAddress(connection.signerAddress);
+    //         const foodContract = getFoodTraceabilityContract(connection.signer);
+    //         setContract(foodContract);
+
+    //         if (connection.isExpectedNetwork) {
+    //             antdMessage.success(`钱包已连接: ${connection.signerAddress.substring(0,6)}...${connection.signerAddress.substring(connection.signerAddress.length - 4)}`);
+    //             setIsWrongNetwork(false);
+    //         } else {
+    //             // getProviderAndSigner 内部已经调用了 showAlert，这里可以只更新状态
+    //             setIsWrongNetwork(true);
+    //             // 或者再额外提示一次，如果需要更强的页面级提示
+    //             // antdMessage.warning(`请切换到 ${EXPECTED_NETWORK_NAME} 网络。`, 5);
+    //         }
+    //     } else {
+    //         // getProviderAndSigner 内部已经调用了 showAlert
+    //         // antdMessage.error('连接钱包失败。'); // 无需重复
+    //     }
+    //     setIsLoading(false);
+    // };
 
     // 监听网络变化 (更健壮)
     useEffect(() => {
