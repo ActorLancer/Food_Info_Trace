@@ -6,38 +6,50 @@ use crate::models::{
     // PaginatedFoodListResponse
 };
 use crate::db;
+use sqlx::Error as SqlxError; // 引入 sqlx::Error 以便模式匹配
 
 #[post("/api/food-records")]
 pub async fn create_food_record_handler(
-    app_state: web::Data<AppState>, // 注入应用状态 (包含数据库连接池)
-    record_request: web::Json<FoodRecordRequest>, // 从请求体中提取并反序列化JSON数据
+    app_state: web::Data<AppState>,
+    record_request: web::Json<FoodRecordRequest>,
 ) -> impl Responder {
-    let record_id = record_request.product_id.clone();
-    match db::create_food_record_db(&app_state.db_pool, &record_request.into_inner()).await {
+    let request_data = record_request.into_inner(); // 获取内部数据，避免后续所有权问题
+
+    match db::create_food_record_db(&app_state.db_pool, &request_data).await {
         Ok(rows_affected) if rows_affected > 0 => {
             HttpResponse::Created().json(GenericResponse {
                 status: "success".to_string(),
-                message: format!("食品记录 {} 已成功创建。", record_id), // record_request is consumed by into_inner()
+                message: format!("食品记录 {} 已成功创建。", request_data.product_id),
             })
         }
-        Ok(_) => HttpResponse::InternalServerError().json(GenericResponse {
-                    status: "error".to_string(),
-                    message: "创建食品记录失败，请稍后再试。".to_string(),
-                }),
-        Err(e) => {
-            // 根据 sqlx::Error 类型处理唯一约束等错误
-            if let Some(db_err) = e.as_database_error() {
-                if db_err.is_unique_violation() {
-                    return HttpResponse::Conflict().json(GenericResponse { // 409 Conflict
-                        status: "error".to_string(),
-                        message: format!("产品ID '{}' 已存在。", record_id),
-                    });
-                }
-            }
+        Ok(_) => { // rows_affected == 0 或其他非预期成功情况
+            eprintln!("创建食品记录 {} 成功，但没有行受到影响。", request_data.product_id);
             HttpResponse::InternalServerError().json(GenericResponse {
                 status: "error".to_string(),
-                message: "创建食品记录时发生数据库错误。".to_string(),
+                message: "创建食品记录失败，操作未修改任何数据。".to_string(),
             })
+        }
+        Err(e) => {
+            eprintln!("创建食品记录 {} 数据库错误: {:?}", request_data.product_id, e);
+            match e {
+                SqlxError::Database(db_err) if db_err.is_unique_violation() => {
+                    HttpResponse::Conflict().json(GenericResponse {
+                        status: "error".to_string(),
+                        message: format!("产品ID '{}' 已存在。", request_data.product_id),
+                    })
+                }
+                // 可以根据需要添加对其他 db_err 类型的处理，如 is_foreign_key_violation 等
+                SqlxError::Decode(_) => { // serde_json::to_string 失败时 db::create_food_record_db 会返回这个
+                     HttpResponse::BadRequest().json(GenericResponse {
+                        status: "error".to_string(),
+                        message: "请求中的元数据格式无效。".to_string(),
+                    })
+                }
+                _ => HttpResponse::InternalServerError().json(GenericResponse {
+                    status: "error".to_string(),
+                    message: "创建食品记录时发生内部错误。".to_string(),
+                }),
+            }
         }
     }
 }
@@ -49,10 +61,14 @@ pub async fn get_food_records_list_handler(
 ) -> impl Responder {
     match db::get_food_records_list_db(&app_state.db_pool, &query_params.into_inner()).await {
         Ok(paginated_response) => HttpResponse::Ok().json(paginated_response),
-        Err(_) => HttpResponse::InternalServerError().json(GenericResponse {
-            status: "error".to_string(),
-            message: "获取食品列表数据失败。".to_string(),
-        }),
+        Err(e) => {
+            eprintln!("获取食品列表数据库错误: {:?}", e);
+            // 对于列表查询，大部分 sqlx::Error 可能都指示服务器端问题
+            HttpResponse::InternalServerError().json(GenericResponse {
+                status: "error".to_string(),
+                message: "获取食品列表时发生内部错误。".to_string(),
+            })
+        }
     }
 }
 
@@ -64,7 +80,7 @@ pub async fn get_food_record_detail_handler(
     let product_id = path.into_inner();
     match db::get_food_record_detail_db(&app_state.db_pool, &product_id).await {
         Ok(Some(record)) => {
-            let response_payload = FoodRecordDetailResponse { // 保持这个转换
+            let response_payload = FoodRecordDetailResponse {
                product_id: record.product_id,
                metadata_json: record.metadata_json.0,
                onchain_metadata_hash: record.onchain_metadata_hash,
@@ -74,14 +90,29 @@ pub async fn get_food_record_detail_handler(
            };
            HttpResponse::Ok().json(response_payload)
         }
-        Ok(None) => HttpResponse::NotFound().json(GenericResponse {
-            status: "error".to_string(),
-            message: format!("未找到产品ID为 {} 的食品记录。", product_id),
-        }),
-        Err(_) => HttpResponse::InternalServerError().json(GenericResponse {
-            status: "error".to_string(),
-            message: "获取食品详情失败。".to_string(),
-        }),
+        Ok(None) => { // db::get_food_record_detail_db 使用 fetch_optional，所以 None 是正常情况
+            HttpResponse::NotFound().json(GenericResponse {
+                status: "error".to_string(),
+                message: format!("未找到产品ID为 '{}' 的食品记录。", product_id),
+            })
+        }
+        Err(e) => {
+            eprintln!("获取产品ID {} 详情数据库错误: {:?}", product_id, e);
+            // 这里也可以根据 e 的类型进行更细致的判断，但通常 RowNotFound 已被 Ok(None) 捕获
+            // 其他错误很可能是服务器内部错误
+            match e {
+                SqlxError::Decode(_) => { // 如果 FoodRecordDetail 结构与数据库不匹配
+                    HttpResponse::InternalServerError().json(GenericResponse {
+                        status: "error".to_string(),
+                        message: "服务器无法正确处理数据格式。".to_string(),
+                    })
+                }
+                _ => HttpResponse::InternalServerError().json(GenericResponse {
+                    status: "error".to_string(),
+                    message: "获取食品详情时发生内部错误。".to_string(),
+                }),
+            }
+        }
     }
 }
 
