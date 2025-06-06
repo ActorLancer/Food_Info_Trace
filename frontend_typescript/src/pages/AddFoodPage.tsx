@@ -120,7 +120,7 @@ const AddFoodPage: React.FC = () => {
                 window.ethereum.removeListener('chainChanged', handleChainChanged);
             }
         };
-    }, [signerAddress]); // 当 signerAddress 变化时（表示已连接或断开），重新设置监听器或逻辑
+    }, [signerAddress, connectWallet]); // 当 signerAddress 或 connectWallet 变化时（表示已连接或断开），重新设置监听器或逻辑
 
     // 页面加载时尝试自动连接
     useEffect(() => {

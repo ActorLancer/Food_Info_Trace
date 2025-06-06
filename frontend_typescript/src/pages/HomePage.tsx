@@ -56,7 +56,14 @@ const columns = (navigate: ReturnType<typeof useNavigate>) => [ // 将 navigate 
         key: 'created_at',
         render: (dateString: string) => new Date(dateString).toLocaleString('zh-CN'),
         sorter: (a: FoodListItemFromAPI, b: FoodListItemFromAPI) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-        defaultSortOrder: 'descend' as const, // 默认按时间降序
+        // sortDirections: ['descend', 'ascend'], // 只允许降序和升序
+        defaultSortOrder: 'descend' as const, // 保持默认降序
+        // Ge-Ai:
+        // 如果希望初始是降序，点击后变升序，再点击回降序，可以这样设置
+        // 或者，如果希望初始不排序，点击第一次是降序（或升序），再点击是另一种，则可以去掉 defaultSortOrder，
+        // 并可能需要在 Table 的 onChange 中管理 sortOrder 状态。
+        // 但对于两态切换，通常 defaultSortOrder 配合受控的 sortOrder (如果需要更精细控制) 或非受控行为效果更好。
+        // 我们先尝试非受控行为，仅限制 sortDirections。
     },
     {
         title: '操作',

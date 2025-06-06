@@ -180,6 +180,7 @@ export const EXPECTED_CHAIN_ID = "0x539"; // 期望的 Hardhat 本地网络 Chai
 export const EXPECTED_NETWORK_NAME = "Hardhat Local"; // 添加网络时的提示
 export const EXPECTED_RPC_URL = "http://127.0.0.1:8545"; // Hardhat RPC
 export const EXPECTED_CURRENCY_SYMBOL = "ETH"; // or "GO"
+export const NATIVE_CURRENCY = { name: "Hardhat Local", symbol: "ETH", decimals: 18 };
 
 // Old Method
 // interface EthereumWindow extends Window {
